@@ -2,7 +2,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk
 
-from utils6 import create_account, set_balance, update_rates
+from utils import create_account, set_balance, update_rates
 from models import update_accounts_model
 
 TITLE = 'New Account'

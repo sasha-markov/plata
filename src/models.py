@@ -2,7 +2,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk
 
-from utils6 import get_model_accounts
+from utils import get_model_accounts
 
 
 # Creating the ListStore models

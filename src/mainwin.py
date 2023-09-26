@@ -2,7 +2,6 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk
 
-
 from utils import get_model_accounts, get_model_rates, create_account, \
                   get_account, delete_account, set_balance, update_rates
 
@@ -11,16 +10,13 @@ from accountwin import AccountWin
 from ratewin import NewRateWin
 
 TOOLBAR_BORDER_WIDTH = 4
-TITLE = 'Plata'
 GRID_LINES = 1
 CELL_HEIGHT = 50
 
 accounts = get_model_accounts()
-# print(accounts)
 update_accounts_model()
 
 rates = get_model_rates()
-# print(rates)
 
 categories = []
 for row in accounts:
@@ -29,29 +25,30 @@ for row in accounts:
             categories.append(category.strip())
 categories = set(categories)
 categories.add('All')
-# print(categories)
 
 
 class FilterElement(Gtk.ListBoxRow):
-    """ """
+    """Describes filters by category"""
     def __init__(self, data):
+        # Fix this
         super().__init__(halign=1, margin_top=3, margin_bottom=3)
         self.data = data
         self.add(Gtk.Label(label=data))
 
 
 class MyStatusbar(Gtk.Statusbar):
-    """ """
+    """Describes status bar of the main window"""
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        message_area_box = self.get_message_area()
-        label = message_area_box.get_children()[0]
-        message_area_box.set_child_packing(label, False, False, 0, Gtk.PackType.END)
+        message_box.get_message_area()
+        label = message_box.get_children()[0]
+        message_box.set_child_packing(label, False, False, 0, Gtk.PackType.END)
 
 
 class MainWin(Gtk.ApplicationWindow):
-    def __init__(self, **kwargs):
+    def __init__(self, title, **kwargs):
         super().__init__(**kwargs)
+        self.title = title
 
         self.update_button = Gtk.Button(hexpand=True)
         self.update_button.connect('clicked', self.on_update_button_clicked)
@@ -71,7 +68,7 @@ class MainWin(Gtk.ApplicationWindow):
             self.hbox.add(button)
         self.hbox.show_all()
 
-        # Adding hbox with buttons and separator to the vbox 
+        # Adding hbox with buttons and separator to the vbox
         self.vbox.add(self.hbox)
         self.vbox.add(Gtk.Separator())
 
@@ -83,7 +80,7 @@ class MainWin(Gtk.ApplicationWindow):
         self.about_button = Gtk.ModelButton(label='About', halign=1)
         self.vbox.add(self.about_button)
         self.vbox.show_all()
-        
+
         # Creating the popover and adding to it vbox
         # which contains hbox with buttons and separator
         self.popover = Gtk.Popover()
@@ -92,7 +89,7 @@ class MainWin(Gtk.ApplicationWindow):
         # Creating the context popover
         self.accounts_menu = Gtk.Menu()
         self.rates_menu = Gtk.Menu()
-        
+
         self.menuitem1 = Gtk.MenuItem(label='Add Account...')
         self.menuitem1.connect('activate', self.create_account)
 
@@ -112,7 +109,7 @@ class MainWin(Gtk.ApplicationWindow):
         self.rates_menu.append(self.menuitem2)
 
         # Setting up the header bar with menu button which opens popover
-        self.hb = Gtk.HeaderBar(title=TITLE, show_close_button=True)
+        self.hb = Gtk.HeaderBar(title=self.title, show_close_button=True)
         self.hb.pack_end(Gtk.MenuButton(popover=self.popover))
         self.set_titlebar(self.hb)
 
@@ -143,7 +140,8 @@ class MainWin(Gtk.ApplicationWindow):
 
         self.rates_treeview = Gtk.TreeView(model=self.rates)
         self.rates_treeview.set_grid_lines(GRID_LINES)
-        self.rates_treeview.connect('button-press-event', self.on_right_button_press)
+        self.rates_treeview.connect('button-press-event',
+                                    self.on_right_button_press)
         for i, column_title in enumerate(['Currency', 'Rate']):
             renderer = Gtk.CellRendererText(height=CELL_HEIGHT)
             column = Gtk.TreeViewColumn(column_title, renderer, text=i)
@@ -170,7 +168,7 @@ class MainWin(Gtk.ApplicationWindow):
 
         self.status_bar = MyStatusbar()
         self.message_area = self.status_bar.get_message_area()
-        
+
         self.vvbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.vvbox.add(self.accounts_window)
         self.vvbox.add(self.status_bar)
@@ -190,7 +188,7 @@ class MainWin(Gtk.ApplicationWindow):
         self.rates_window.add(self.rates_treeview)
         self.notebook.append_page(self.rates_window,
                                   Gtk.Label(label='Exchange rates'))
-        
+
         self.add(self.notebook)
         # self.add(self.grid)
         self.filters.select_row(self.filters.get_row_at_index(0))
@@ -229,7 +227,7 @@ class MainWin(Gtk.ApplicationWindow):
         total = self.sum_accounts(self.user_filter)
         self.status_bar.pop(303)
         self.status_bar.push(303, f'${total:,.0f}')
-    
+
     def cell_data_func(self, column, cell, model, iter, i):
         value = model.get(iter, i)[0]
         if value != 0.0:
@@ -250,18 +248,18 @@ class MainWin(Gtk.ApplicationWindow):
         response = dialog.run()
 
     def on_right_button_press(self, widget, event):
-        # Check of right mouse button was pressed
+        #  Check of right mouse button was pressed
         selection = widget.get_selection()
         if event.type == Gdk.EventType.BUTTON_PRESS and event.button == 3:
             if widget is self.treeview:
                 self.accounts_menu.popup_at_pointer(event)
-                return True # event has been handled
+                return True  # event has been handled
             elif widget is self.treeview and selection.count_selected_rows() == 1:
                 print('Ha!!')
                 return True
             elif widget is self.rates_treeview:
                 self.rates_menu.popup_at_pointer(event)
-                return True # event has been handled
+                return True  # event has been handled
 
     def create_account(self, widget):
         # Opens New Account window
@@ -277,10 +275,10 @@ class MainWin(Gtk.ApplicationWindow):
         iter = accounts_model.get_iter(selection[1])
         account = accounts_model.get_value(iter, 0)
         account_name, currency, balance, categories = get_account(account)
-        
+
         dialog = AccountWin(title='Edit Account', modal=True)
         dialog.create_button.set_label('Done')
-        
+
         dialog.account_entry.set_text(account_name)
         dialog.currency_entry.set_text(currency)
         dialog.currency_entry.set_editable(False)
