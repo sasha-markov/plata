@@ -40,7 +40,7 @@ class MyStatusbar(Gtk.Statusbar):
     """Describes status bar of the main window"""
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        message_box.get_message_area()
+        message_box = self.get_message_area()
         label = message_box.get_children()[0]
         message_box.set_child_packing(label, False, False, 0, Gtk.PackType.END)
 

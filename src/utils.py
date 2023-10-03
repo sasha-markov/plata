@@ -31,6 +31,14 @@ class Account(Base):
     currency = Column(String)
     categories = Column(String)
 
+    def add(self):
+        with Session(engine) as session, session.begin():
+            stmt = insert(Account).values(name=self.name,
+                                          currency=self.currency,
+                                          categories=self.categories)
+            session.execute(stmt)
+
+
 
 class Balance(Base):
     """ Describe a balance
@@ -41,6 +49,15 @@ class Balance(Base):
     account = Column(String)
     updated = Column(String)
     data = Column(Float)
+
+    def set(self):
+        with Session(engine) as session, session.begin():
+            stmt = insert(Balance).values(account=self.account,
+                                          updated=get_localtime(),
+                                          data=self.data)
+            session.execute(stmt)
+            session.execute(DropView('vbalances'))
+            session.execute(CreateView('vbalances', select_balances))            
 
 
 class Rate(Base):

@@ -2,12 +2,21 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk
 
-from utils import create_account, set_balance, update_rates
+from utils import create_account, set_balance, update_rates, Account
 from models import update_accounts_model
 
-TITLE = 'New Account'
-WINDOW_HEIGHT=450
-R = 1.618  # golden ratio
+R = 1.618            # Golden ratio
+
+WINDOW_HEIGHT = 450  # In pixels
+BORDER_WIDTH = 8
+PADDING = 3
+
+
+class MyLabel(Gtk.Label):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        self.set_halign(1)
 
 
 class AccountWin(Gtk.Window):
@@ -20,48 +29,48 @@ class AccountWin(Gtk.Window):
         self.cancel_button.connect('clicked', self.on_cancel)
         self.create_button = Gtk.Button(label='Create')
         self.create_button.connect('clicked', self.on_create)
-        
+
         # Setting up the header bar
         self.hb = Gtk.HeaderBar(title=title, show_close_button=False)
         self.hb.pack_start(self.cancel_button)
         self.hb.pack_end(self.create_button)
-        
+
         self.set_titlebar(self.hb)
 
         self.vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.vbox.props.border_width = 8
+        self.vbox.props.border_width = BORDER_WIDTH
 
         self.account_entry = Gtk.Entry()
         self.currency_entry = Gtk.Entry()
         self.categories_entry = Gtk.Entry()
         self.balance_entry = Gtk.Entry()
 
-        self.vbox.pack_start(Gtk.Label(label='Account name', halign=1), False, False, 3)
-        self.vbox.pack_start(self.account_entry, False, False, 3)
-        self.vbox.pack_start(Gtk.Label(label='Currency', halign=1), False, False, 3)
-        self.vbox.pack_start(self.currency_entry, False, False, 3)
-        self.vbox.pack_start(Gtk.Label(label='Categories', halign=1), False, False, 3)
-        self.vbox.pack_start(self.categories_entry, False, False, 3)
-        self.vbox.pack_start(Gtk.Label(label='Balance', halign=1), False, False, 3)
-        self.vbox.pack_start(self.balance_entry, False, False, 3)                
+        self.entries = (MyLabel(label='Account name'), self.account_entry,
+                        MyLabel(label='Currency'), self.currency_entry,
+                        MyLabel(label='Categories'), self.categories_entry,
+                        MyLabel(label='Balance'), self.balance_entry)
+        options = (False, False, PADDING)
+        [self.vbox.pack_start(item, *options) for item in self.entries]
 
         self.add(self.vbox)
-
         self.show_all()
 
     def on_cancel(self, widget):
         self.close()
 
     def on_create(self, widget):
-        account = self.account_entry.get_text()
-        currency = self.currency_entry.get_text()
-        categories = self.categories_entry.get_text()
-        balance = self.balance_entry.get_text()
-        create_account(account, currency, categories)
-        set_balance(account, balance)
-        # update_rates()
-        update_accounts_model()
-        self.close()
+        account = Account(name=self.account_entry.get_text(),
+                          currency=self.currency_entry.get_text(),
+                          categories=self.categories_entry.get_text())
+        # account.add()
+        balance = Balance(account=self.account_entry.get_text(),
+                          balance=self.balance_entry.get_text())
+        # balance = self.balance_entry.get_text()
+        # create_account(account, currency, categories)
+        # set_balance(account, balance)
+        # # update_rates()
+        # update_accounts_model()
+        # self.close()
 
     def on_edit(self, widget):
         account = self.account_entry.get_text()
