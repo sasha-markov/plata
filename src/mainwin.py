@@ -2,10 +2,12 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk
 
-from utils import get_model_accounts, get_model_rates, create_account, \
-                  get_account, delete_account, set_balance, update_rates
+from utils import get_model_accounts, create_account, get_account, \
+                  delete_account, set_balance, update_rates
 
-from models import accounts_model, update_accounts_model
+from models import accounts_model, update_accounts_model, \
+                   rates_model, update_rates_model
+
 from accountwin import AccountWin
 from ratewin import NewRateWin
 
@@ -13,24 +15,22 @@ TOOLBAR_BORDER_WIDTH = 4
 GRID_LINES = 1
 CELL_HEIGHT = 50
 
-accounts = get_model_accounts()
-update_accounts_model()
 
-rates = get_model_rates()
-
-categories = []
-for row in accounts:
-    for category in row.categories.split(sep=','):
-        if category:
-            categories.append(category.strip())
-categories = set(categories)
-categories.add('All')
+def get_categories(accounts):
+    categories = []
+    for row in accounts:
+        for category in row.categories.split(sep=','):
+            if category:
+                categories.append(category.strip())
+    categories = set(categories)
+    categories.add('All')
+    return categories
 
 
 class FilterElement(Gtk.ListBoxRow):
     """Describes filters by category"""
     def __init__(self, data):
-        # Fix this
+        # Fix magic numbers
         super().__init__(halign=1, margin_top=3, margin_bottom=3)
         self.data = data
         self.add(Gtk.Label(label=data))
@@ -49,6 +49,12 @@ class MainWin(Gtk.ApplicationWindow):
     def __init__(self, title, **kwargs):
         super().__init__(**kwargs)
         self.title = title
+        
+        accounts = get_model_accounts()
+        categories = get_categories(accounts)
+        
+        update_accounts_model(accounts)
+        update_rates_model()
 
         self.update_button = Gtk.Button(hexpand=True)
         self.update_button.connect('clicked', self.on_update_button_clicked)
@@ -115,10 +121,6 @@ class MainWin(Gtk.ApplicationWindow):
 
         self.current_filter = 'All'
 
-        self.rates = Gtk.ListStore(str, float)
-        for rate in rates:
-            self.rates.append(rate)
-
         # Creating the filter, feeding it with the ListStore model,
         self.user_filter = accounts_model.filter_new()
         # setting the filter function
@@ -138,7 +140,7 @@ class MainWin(Gtk.ApplicationWindow):
             column.set_expand(True)
             self.treeview.append_column(column)
 
-        self.rates_treeview = Gtk.TreeView(model=self.rates)
+        self.rates_treeview = Gtk.TreeView(model=rates_model)
         self.rates_treeview.set_grid_lines(GRID_LINES)
         self.rates_treeview.connect('button-press-event',
                                     self.on_right_button_press)
@@ -218,15 +220,21 @@ class MainWin(Gtk.ApplicationWindow):
             return self.current_filter in model[iter][3]
             # return model[iter][0].startswith(self.current_filter)
 
+    def update_total(self):
+        total = self.sum_accounts(self.user_filter)
+        self.status_bar.pop(303)
+        self.status_bar.push(303, f'${total:,.0f}')
+
     def on_row_selected(self, widget, row):
         """Called if the row in the ListBox is selected"""
         # Sets the current category filter to the data field of selected row
         self.current_filter = row.data
         # Updates the filter, which updates in turn the view
         self.user_filter.refilter()
-        total = self.sum_accounts(self.user_filter)
-        self.status_bar.pop(303)
-        self.status_bar.push(303, f'${total:,.0f}')
+        self.update_total()
+        # total = self.sum_accounts(self.user_filter)
+        # self.status_bar.pop(303)
+        # self.status_bar.push(303, f'${total:,.0f}')
 
     def cell_data_func(self, column, cell, model, iter, i):
         value = model.get(iter, i)[0]

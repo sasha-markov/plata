@@ -56,8 +56,8 @@ class Balance(Base):
                                           updated=get_localtime(),
                                           data=self.data)
             session.execute(stmt)
-            session.execute(DropView('vbalances'))
-            session.execute(CreateView('vbalances', select_balances))            
+            # session.execute(DropView('vbalances'))
+            # session.execute(CreateView('vbalances', select_balances))            
 
 
 class Rate(Base):
@@ -151,8 +151,8 @@ def update_rates():
 
 def get_model_accounts():
     with Session(engine) as session, session.begin():
-        session.execute(DropView('vbalances'))
-        session.execute(CreateView('vbalances', select_balances))
+        # session.execute(DropView('vbalances'))
+        # session.execute(CreateView('vbalances', select_balances))
         stmt = (
             select(
                 LastBalance.account,
@@ -221,3 +221,8 @@ def set_balance(account, data):
 #     with Session(engine) as session, session.begin():
 #         stmt = 
 #     return Account
+
+def create_table_views():
+    with Session(engine) as session, session.begin():
+        session.execute(DropView('vbalances'))
+        session.execute(CreateView('vbalances', select_balances))

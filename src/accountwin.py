@@ -2,8 +2,9 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk
 
-from utils import create_account, set_balance, update_rates, Account
 from models import update_accounts_model
+from utils import create_account, set_balance, update_rates, Account, Balance, \
+                  create_table_views, get_model_accounts
 
 R = 1.618            # Golden ratio
 
@@ -23,7 +24,7 @@ class AccountWin(Gtk.Window):
     def __init__(self, title, **kwargs):
         super().__init__(**kwargs)
 
-        # self.set_default_size(WINDOW_HEIGHT, WINDOW_HEIGHT * R)
+        self.set_default_size(WINDOW_HEIGHT, WINDOW_HEIGHT * R)
 
         self.cancel_button = Gtk.Button(label='Cancel')
         self.cancel_button.connect('clicked', self.on_cancel)
@@ -62,15 +63,13 @@ class AccountWin(Gtk.Window):
         account = Account(name=self.account_entry.get_text(),
                           currency=self.currency_entry.get_text(),
                           categories=self.categories_entry.get_text())
-        # account.add()
+        account.add()
         balance = Balance(account=self.account_entry.get_text(),
-                          balance=self.balance_entry.get_text())
-        # balance = self.balance_entry.get_text()
-        # create_account(account, currency, categories)
-        # set_balance(account, balance)
-        # # update_rates()
-        # update_accounts_model()
-        # self.close()
+                          data=self.balance_entry.get_text())
+        balance.set()
+        create_table_views()
+        update_accounts_model(get_model_accounts())
+        self.close()
 
     def on_edit(self, widget):
         account = self.account_entry.get_text()
