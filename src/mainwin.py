@@ -2,10 +2,11 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk
 
-from utils import get_model_accounts, create_account, get_account, \
-                  delete_account, set_balance, update_rates
+from utils import get_accounts, create_account, get_account, \
+                  delete_account, set_balance, update_rates, \
+                  create_table_views, Balance
 
-from models import accounts_model, update_accounts_model, \
+from models import get_accounts_model, update_accounts_model, \
                    rates_model, update_rates_model
 
 from accountwin import AccountWin
@@ -49,12 +50,16 @@ class MainWin(Gtk.ApplicationWindow):
     def __init__(self, title, **kwargs):
         super().__init__(**kwargs)
         self.title = title
+        self.model = None
         
-        accounts = get_model_accounts()
+        accounts = get_accounts()
         categories = get_categories(accounts)
         
-        update_accounts_model(accounts)
+        accounts_model = get_accounts_model()
         update_rates_model()
+
+        # accounts_model.connect('row-inserted', self.on_accounts_inserted)
+        # accounts_model.connect('row-deleted', self.on_accounts_closed)
 
         self.update_button = Gtk.Button(hexpand=True)
         self.update_button.connect('clicked', self.on_update_button_clicked)
@@ -102,8 +107,8 @@ class MainWin(Gtk.ApplicationWindow):
         self.menuitem3 = Gtk.MenuItem(label='Edit Account...')
         self.menuitem3.connect('activate', self.edit_account)
 
-        self.menuitem4 = Gtk.MenuItem(label='Delete Account...')
-        self.menuitem4.connect('activate', self.delete_account)
+        self.menuitem4 = Gtk.MenuItem(label='Close Account...')
+        self.menuitem4.connect('activate', self.close_account)
 
         for item in [self.menuitem1, self.menuitem3, self.menuitem4]:
             item.show()
@@ -225,6 +230,13 @@ class MainWin(Gtk.ApplicationWindow):
         self.status_bar.pop(303)
         self.status_bar.push(303, f'${total:,.0f}')
 
+    def on_accounts_inserted(self, model, path, iter):
+        # self.user_filter.refilter()
+        self.update_total()
+
+    def on_accounts_closed(self, model, path):
+        self.update_total()
+
     def on_row_selected(self, widget, row):
         """Called if the row in the ListBox is selected"""
         # Sets the current category filter to the data field of selected row
@@ -271,7 +283,12 @@ class MainWin(Gtk.ApplicationWindow):
 
     def create_account(self, widget):
         # Opens New Account window
-        dialog = AccountWin(title='New Account', modal=True)
+        dialog = AccountWin(title='New Account', modal=True, parent=self)
+        if dialog.accounts_model is not None:
+            self.user_filter = dialog.accounts_model.filter_new()
+            # setting the filter function
+            self.user_filter.set_visible_func(self.user_filter_func)
+            self.treeview.set_model(self.user_filter)
 
     def add_rate(self, widget):
         # Opens New Rate window
@@ -280,8 +297,8 @@ class MainWin(Gtk.ApplicationWindow):
 
     def edit_account(self, menuitem):
         selection = self.treeview.get_selection().get_selected_rows()
-        iter = accounts_model.get_iter(selection[1])
-        account = accounts_model.get_value(iter, 0)
+        iterator = accounts_model.get_iter(selection[1])
+        account = accounts_model.get_value(iterator, 0)
         account_name, currency, balance, categories = get_account(account)
 
         dialog = AccountWin(title='Edit Account', modal=True)
@@ -293,10 +310,23 @@ class MainWin(Gtk.ApplicationWindow):
         dialog.balance_entry.set_text(str(balance))
         dialog.categories_entry.set_text(categories)
 
-    def delete_account(self, menuitem):
+    def close_account(self, menuitem):
         selection = self.treeview.get_selection().get_selected_rows()
-        iter = accounts_model.get_iter(selection[1])
-        account = accounts_model.get_value(iter, 0)
-        delete_account(account)
-        set_balance(account, 0)
-        update_accounts_model()
+        iterator = accounts_model.get_iter(selection[1])
+        # account = accounts_model.get_value(iter, 0)
+        zero_balance = Balance(account=accounts_model.get_value(iterator, 0),
+                               data=0)
+        zero_balance.set()
+        accounts_model.remove(iterator)
+        self.user_filter.refilter()
+        self.update_total()
+        create_table_views()
+        # print(get_model_accounts())
+        # update_accounts_model(get_model_accounts())
+
+    def set_model(self, model):
+        self.user_filter = model.filter_new()
+        # setting the filter function
+        self.user_filter.set_visible_func(self.user_filter_func)
+        self.treeview.set_model(self.user_filter)
+        self.update_total()

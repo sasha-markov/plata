@@ -2,9 +2,9 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk
 
-from models import update_accounts_model
+from models import get_accounts_model
 from utils import create_account, set_balance, update_rates, Account, Balance, \
-                  create_table_views, get_model_accounts
+                  create_table_views, get_accounts
 
 R = 1.618            # Golden ratio
 
@@ -21,8 +21,11 @@ class MyLabel(Gtk.Label):
 
 
 class AccountWin(Gtk.Window):
-    def __init__(self, title, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, parent, title, **kwargs):
+        super().__init__(transient_for=parent, **kwargs)
+
+        self.parent = parent
+        self.accounts_model = None
 
         self.set_default_size(WINDOW_HEIGHT, WINDOW_HEIGHT * R)
 
@@ -68,7 +71,14 @@ class AccountWin(Gtk.Window):
                           data=self.balance_entry.get_text())
         balance.set()
         create_table_views()
-        update_accounts_model(get_model_accounts())
+        # Fix this
+        self.accounts_model = get_accounts_model()
+        # self.parent.set_title('AAAA')
+        self.parent.set_model(self.accounts_model)
+        # self.user_filter = self.accounts_model.filter_new()
+        # self.user_filter.set_visible_func(parent.user_filter_func)
+        # parent.treeview.set_model(parent.user_filter)
+        # update_accounts_model(get_model_accounts())
         self.close()
 
     def on_edit(self, widget):

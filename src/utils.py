@@ -39,7 +39,6 @@ class Account(Base):
             session.execute(stmt)
 
 
-
 class Balance(Base):
     """ Describe a balance
     """
@@ -56,8 +55,6 @@ class Balance(Base):
                                           updated=get_localtime(),
                                           data=self.data)
             session.execute(stmt)
-            # session.execute(DropView('vbalances'))
-            # session.execute(CreateView('vbalances', select_balances))            
 
 
 class Rate(Base):
@@ -104,7 +101,8 @@ subq_balances = (
         func.row_number().over(
             order_by=Balance.updated.desc(), partition_by=Balance.account)
         .label('rn')
-    ).subquery()
+    )
+    .subquery()
 )
 
 select_balances = (
@@ -149,10 +147,8 @@ def update_rates():
         session.execute(DropView('vrates'))
         session.execute(CreateView('vrates', select_rates))
 
-def get_model_accounts():
+def get_accounts():
     with Session(engine) as session, session.begin():
-        # session.execute(DropView('vbalances'))
-        # session.execute(CreateView('vbalances', select_balances))
         stmt = (
             select(
                 LastBalance.account,

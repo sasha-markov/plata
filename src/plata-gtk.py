@@ -53,6 +53,7 @@ class MyApplication(Gtk.Application):
         self.quit()
 
 
-app = MyApplication()
-exit_status = app.run(sys.argv)
-sys.exit(exit_status)
+if __name__ == '__main__':
+    app = MyApplication()
+    exit_status = app.run(sys.argv)
+    sys.exit(exit_status)
