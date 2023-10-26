@@ -31,12 +31,15 @@ class Account(Base):
     currency = Column(String)
     categories = Column(String)
 
+    # def get(self, )
+
     def add(self):
         with Session(engine) as session, session.begin():
-            stmt = insert(Account).values(name=self.name,
-                                          currency=self.currency,
-                                          categories=self.categories)
-            session.execute(stmt)
+            session.add(self)
+            # stmt = insert(Account).values(name=self.name,
+            #                               currency=self.currency,
+            #                               categories=self.categories)
+            # session.execute(stmt)
 
 
 class Balance(Base):
@@ -49,12 +52,16 @@ class Balance(Base):
     updated = Column(String)
     data = Column(Float)
 
+    def __init__(self, **kwargs):
+        self.updated = get_localtime()
+
     def set(self):
         with Session(engine) as session, session.begin():
-            stmt = insert(Balance).values(account=self.account,
-                                          updated=get_localtime(),
-                                          data=self.data)
-            session.execute(stmt)
+            session.add(self)
+            # stmt = insert(Balance).values(account=self.account,
+            #                               updated=get_localtime(),
+            #                               data=self.data)
+            # session.execute(stmt)
 
 
 class Rate(Base):
@@ -147,21 +154,6 @@ def update_rates():
         session.execute(DropView('vrates'))
         session.execute(CreateView('vrates', select_rates))
 
-def get_accounts():
-    with Session(engine) as session, session.begin():
-        stmt = (
-            select(
-                LastBalance.account,
-                LastBalance.data,
-                func.round(LastBalance.data * LastRate.data).label('usd'),
-                Account.categories,                
-            )
-        .join(Account, LastBalance.account == Account.name)
-        .join(LastRate, Account.currency == LastRate.currency1)
-        .where(LastBalance.data != 0)
-        .order_by(desc('usd'))
-        )
-        return session.execute(stmt).all()
 
 def get_account(name):
     with Session(engine) as session, session.begin():
@@ -176,6 +168,11 @@ def get_account(name):
             .where(Account.name == name)
             )
         return session.execute(stmt).first()
+
+def get_account_mod(name):
+    with Session(engine) as session, session.begin():
+        stmt = select(Account).filter_by(name=name)
+        return session.execute(stmt).scalar_one()
 
 def get_model_rates():
     with Session(engine) as session, session.begin():
@@ -222,3 +219,8 @@ def create_table_views():
     with Session(engine) as session, session.begin():
         session.execute(DropView('vbalances'))
         session.execute(CreateView('vbalances', select_balances))
+
+def account_exists(account):
+    with Session(engine) as session, session.begin():
+        q = session.query(Account).filter(Account.name == account)
+        return q.first()

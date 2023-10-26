@@ -8,18 +8,7 @@ from mainwin import MainWin
 
 TITLE = 'Plata'
 MAIN_WINDOW_HEIGHT = 700
-# DIALOG_WINDOW_HEIGHT = 500
 R = 1.618  # golden ratio
-
-# class UpdateDialog(Gtk.Dialog):
-#     def __init__(self, parent):
-#         super().__init__(title='Update rates', transient_for=parent, flags=0)
-#         self.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
-#         self.set_default_size(DIALOG_WINDOW_HEIGHT / R, DIALOG_WINDOW_HEIGHT)
-#         label = Gtk.Label(label='This is update dialog')
-#         box = self.get_content_area()
-#         box.add(label)
-#         self.show_all()
 
 
 class MyApplication(Gtk.Application):
