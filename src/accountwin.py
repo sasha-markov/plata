@@ -21,7 +21,13 @@ PADDING = 3
 
 MESSAGE = 'An account with that name already exists.'
 
-
+# !Fix this method:
+# 1. Adds rows to tables
+# 2. Drops and creates tableview vbalances
+# 3. Adds new new row to accounts ListStore
+# But it does not sorts rows in TreeView
+# Fix: recreating a new ListStore model with sorted rows
+# and return it
 def create_account(name: str,
                    currency: str,
                    categories: str,
@@ -56,7 +62,7 @@ def create_account(name: str,
     if row.categories:
         for item in row.categories.split(sep=','):
             filters.add(item.strip())
-        
+    
     accounts.append(row)
 
 
@@ -225,4 +231,5 @@ class NewAccountWin(Gtk.Window):
                        self.parent.new_categories,
                        )
         self.parent.update_filters()
+        self.parent.update_total()
         self.close()

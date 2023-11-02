@@ -277,9 +277,10 @@ class MainWin(Gtk.ApplicationWindow):
 
     def update_filters(self):
         for item in self.new_categories - self.categories:
+            print(item)
             self.categories.add(item)
-            # print(item)
             self.filters.add(FilterElement(item))
+        self.show_all()
         self.new_categories.clear()
 
     def update_total(self):
@@ -297,19 +298,22 @@ class MainWin(Gtk.ApplicationWindow):
         else:
             return self.current_filter in model[iter][3]
 
+    # Fix empty filters after deleting accounts 
     def on_delete_account(self, menuitem):
         selection = self.treeview.get_selection()
         model_filter, treeiter = selection.get_selected()
-        account_name = model_filter[0][0]
+        # account_name = model_filter[0][0]
         child_model = model_filter.get_model()
         if len(model_filter) == 1:
             row = self.filters.get_selected_row()
             self.filters.remove(row)
             # self.current_filter = 'All'           
         if treeiter:
-            child_iter = model_filter.convert_iter_to_child_iter(treeiter)            
+            child_iter = model_filter.convert_iter_to_child_iter(treeiter)
+            account_name = child_model.get_value(child_iter, 0)
+            delete_account(account_name)
             child_model.remove(child_iter)
-        delete_account(account_name)
+            self.update_total()            
         
     def on_right_button_press(self, widget, event):
         #  Check of right mouse button was pressed
