@@ -2,7 +2,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from database import Session
 from helpers import get_localtime
@@ -21,21 +21,12 @@ PADDING = 3
 
 MESSAGE = 'An account with that name already exists.'
 
-# !Fix this method:
-# 1. Adds rows to tables
-# 2. Drops and creates tableview vbalances
-# 3. Adds new new row to accounts ListStore
-# But it does not sorts rows in TreeView
-# Fix: recreating a new ListStore model with sorted rows
-# and return it
 def create_account(name: str,
                    currency: str,
                    categories: str,
                    balance: float,
-                   accounts: Gtk.ListStore,
                    filters: set,
                    ):
-
     with Session.begin() as session:
         account = Account(name=name, currency=currency, categories=categories)
         session.add(account)
@@ -43,27 +34,39 @@ def create_account(name: str,
         session.add(balance)
 
     with Session.begin() as session:
-        # create_table_views()
         session.execute(DropView('vbalances'))
         session.execute(CreateView('vbalances', select_balances))
-        subq_account = (
-            select(
-                LastBalance.account,
-                LastBalance.data,
-                func.round(LastBalance.data * LastRate.data).label('usd'),
-                Account.categories,
-            )
-            .join(Account, LastBalance.account == Account.name)
-            .join(LastRate, Account.currency == LastRate.currency1)
-            .filter(Account.name == name)
-        ).subquery()
-        row = session.query(subq_account).first()
-
-    if row.categories:
-        for item in row.categories.split(sep=','):
+        rows = session.query(subq_accounts).all()
+        
+    accounts = Gtk.ListStore(str, float, float, str)
+    [accounts.append(row) for row in rows]
+    if categories:
+        for item in categories.split(sep=','):
             filters.add(item.strip())
-    
-    accounts.append(row)
+    return accounts
+
+def update_account(name: str, balance: float, categories: str):
+    with Session.begin() as session:
+        balance = Balance(account=name, updated=get_localtime(), data=balance)
+        session.add(balance)
+
+    with Session.begin() as session:
+        stmt = (
+            update(Account)
+            .where(Account.name == name)
+            .values(categories=categories)
+            .execution_options(synchronize_session='fetch')
+            )
+        result = session.execute(stmt)
+ 
+    with Session.begin() as session:
+        session.execute(DropView('vbalances'))
+        session.execute(CreateView('vbalances', select_balances))
+        rows = session.query(subq_accounts).all()
+
+    accounts = Gtk.ListStore(str, float, float, str)
+    [accounts.append(row) for row in rows]
+    return accounts
 
 
 class MyEntry(Gtk.Entry, Gtk.Editable):
@@ -164,14 +167,17 @@ class EditAccountWin(Gtk.Window):
         self.close()
 
     def on_done(self, widget):
-        balance = Balance(account=self.account_entry.get_text(),
-                          data=self.balance_entry.get_text())
-        balance.set()
-        account = get_account_mod(self.account_entry.get_text())
-        account.categories = self.categories_entry.get_text()
-        create_table_views()
-        self.accounts_model = get_accounts_model()
-        self.parent.set_model(self.accounts_model)
+        categories = self.categories_entry.get_text()
+        new_model = update_account(name=self.account_entry.get_text(),
+                                   balance=self.balance_entry.get_text(),
+                                   categories=categories)
+        if categories:
+            for item in categories.split(sep=','):
+                self.parent.new_categories.add(item.strip())
+    
+        self.parent.set_model(new_model)
+        self.parent.update_filters()
+        self.parent.update_total()        
         self.close()
 
 
@@ -223,13 +229,13 @@ class NewAccountWin(Gtk.Window):
         self.close()
 
     def on_create(self, widget):
-        create_account(self.account_entry.get_text(),
-                       self.currency_entry.get_text(),
-                       self.categories_entry.get_text(),
-                       self.balance_entry.get_text(),
-                       self.parent.accounts_model,
-                       self.parent.new_categories,
-                       )
+        new_model = create_account(self.account_entry.get_text(),
+                                   self.currency_entry.get_text(),
+                                   self.categories_entry.get_text(),
+                                   self.balance_entry.get_text(),
+                                   self.parent.new_categories,
+                                   )
+        self.parent.set_model(new_model)
         self.parent.update_filters()
         self.parent.update_total()
         self.close()

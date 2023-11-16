@@ -2,8 +2,12 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
 
+from sqlalchemy import select
 
-from utils4 import add_rate
+from database import Session
+from helpers import get_localtime
+from models import Rate, LastRate, select_rates, subq_rates
+from views import CreateView, DropView
 
 
 TITLE = 'New Rate'
@@ -11,11 +15,32 @@ WINDOW_WIDTH=350
 R = 1.618  # golden ratio
 
 
-class NewRateWin(Gtk.Window):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+def add_rate(currency: str, data: float):
+    with Session.begin() as session:
+        rate = Rate(updated=get_localtime(),
+                    currency1=currency,
+                    currency2='USD',
+                    data=data)
+        session.add(rate)
 
-        # self.set_default_size(WINDOW_WIDTH, WINDOW_WIDTH * R)
+    with Session.begin() as session:
+        session.execute(DropView('vrates'))
+        session.execute(CreateView('vrates', select_rates))
+        rows = session.query(
+            select(LastRate.currency1, LastRate.data).subquery()
+        ).all()
+    rates = Gtk.ListStore(str, float)
+    [rates.append(row) for row in rows]
+
+    return rates
+
+
+class NewRateWin(Gtk.Window):
+    def __init__(self, parent, **kwargs):
+        super().__init__(transient_for=parent, **kwargs)
+
+        self.parent = parent
+        self.rates_model = parent.rates_model
 
         self.cancel_button = Gtk.Button(label='Cancel')
         self.cancel_button.connect('clicked', self.on_cancel)
@@ -48,8 +73,7 @@ class NewRateWin(Gtk.Window):
         self.close()
 
     def on_add(self, widget):
-        currency = self.currency_entry.get_text()
-        rate = self.rate_entry.get_text()
-        print(currency + ': ' + rate)
-        add_rate(currency, rate)
+        new_model = add_rate(self.currency_entry.get_text(),
+                             self.rate_entry.get_text())
+        self.parent.rates_treeview.set_model(new_model)
         self.close()

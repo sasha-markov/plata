@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
-DB_FILE = '../data_test7.db'
+DB_FILE = '../data_test8.db'
 
 engine = create_engine(f'sqlite:///{DB_FILE}', future=True, echo=True)
 Base = declarative_base()

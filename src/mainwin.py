@@ -2,20 +2,24 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk
 
+import locale
+
 from sqlalchemy import select
 
 from database import Session
-from models import Account, LastRate, subq_accounts
+from models import Account, LastRate, LastBalance, subq_accounts
 
 # Fix this
 from utils import get_account, create_table_views
 
 from accountwin import NewAccountWin, EditAccountWin
-from ratewin import NewRateWin
+from ratewin import NewRateWin, add_rate
 
 TOOLBAR_BORDER_WIDTH = 4
 GRID_LINES = 1
 CELL_HEIGHT = 50
+
+locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
 
 def get_filters_set(categories: str):
     filters = set()
@@ -55,6 +59,20 @@ def delete_account(name: str):
     with Session.begin() as session:
         account = session.query(Account).filter(Account.name == name)
         account.delete(synchronize_session=False)
+
+def get_account(name: str):
+    with Session.begin() as session:
+        subq_update_account = (
+            select(
+                LastBalance.account,
+                Account.currency,
+                LastBalance.data,
+                Account.categories,
+            )
+            .join(Account, LastBalance.account == Account.name)
+            .filter(Account.name == name)
+        ).subquery()
+        return session.query(subq_update_account).first()
 
 
 class FilterElement(Gtk.ListBoxRow):
@@ -147,8 +165,13 @@ class MainWin(Gtk.ApplicationWindow):
 
         self.menuitem2 = Gtk.MenuItem(label='Add Rate...')
         self.menuitem2.connect('activate', self.add_rate)
-        self.menuitem2.show()
-        self.rates_menu.append(self.menuitem2)
+
+        self.menuitem5 = Gtk.MenuItem(label='Delete Rate...')
+        self.menuitem5.connect('activate', self.on_delete_rate)
+
+        for item in [self.menuitem2, self.menuitem5]:
+            item.show()
+            self.rates_menu.append(item)
 
         # Setting up the header bar with menu button which opens popover
         self.hb = Gtk.HeaderBar(title=self.title, show_close_button=True)
@@ -182,6 +205,10 @@ class MainWin(Gtk.ApplicationWindow):
                                     self.on_right_button_press)
         for i, column_title in enumerate(['Currency', 'Rate']):
             renderer = Gtk.CellRendererText(height=CELL_HEIGHT)
+            if column_title == 'Rate':
+                renderer.props.editable = True
+                renderer.connect('edited', self.on_rate_edited)
+                
             column = Gtk.TreeViewColumn(column_title, renderer, text=i)
             column.set_cell_data_func(renderer,
                                       self.cell_data_func_rate,
@@ -229,7 +256,7 @@ class MainWin(Gtk.ApplicationWindow):
 
     def add_rate(self, widget):
         # Opens New Rate window
-        dialog = NewRateWin(modal=True)
+        dialog = NewRateWin(modal=True, parent=self)
         dialog.present()        
 
     def cell_data_func(self, column, cell, model, iter, i):
@@ -252,19 +279,27 @@ class MainWin(Gtk.ApplicationWindow):
         dialog = NewAccountWin(title='New Account', modal=True, parent=self)
 
     def edit_account(self, menuitem):
-        selection = self.treeview.get_selection().get_selected_rows()
-        iterator = self.accounts_model.get_iter(selection[1])
-        account = self.accounts_model.get_value(iterator, 0)
-        account_name, currency, balance, categories = get_account(account)
+        # Opens Edit Account window
+        selection = self.treeview.get_selection()
+        model_filter, treeiter = selection.get_selected()
+        child_model = model_filter.get_model()
+        if treeiter:
+            child_iter = model_filter.convert_iter_to_child_iter(treeiter)
+            account_name = child_model.get_value(child_iter, 0)
 
+        account_name, currency, balance, categories = get_account(account_name)
         dialog = EditAccountWin(title='Edit Account', modal=True, parent=self)
-
         dialog.account_entry.set_text(account_name)
         dialog.account_entry.set_editable(False)
         dialog.currency_entry.set_text(currency)
         dialog.currency_entry.set_editable(False)
         dialog.balance_entry.set_text(str(balance))
         dialog.categories_entry.set_text(categories)
+
+    def set_model(self, model):
+        self.user_filter = model.filter_new()
+        self.user_filter.set_visible_func(self.user_filter_func)
+        self.treeview.set_model(self.user_filter)
 
     def sort_func(self, row1, row2):
         return row1.data.lower() > row2.data.lower()
@@ -313,7 +348,19 @@ class MainWin(Gtk.ApplicationWindow):
             account_name = child_model.get_value(child_iter, 0)
             delete_account(account_name)
             child_model.remove(child_iter)
-            self.update_total()            
+            self.update_total()
+
+    def on_delete_rate(self, menuitem):
+        selection = self.rates_treeview.get_selection()
+        model, treeiter = selection.get_selected()
+        print(self.rates_model.get_value(treeiter, 0))
+
+    def on_rate_edited(self, widget, path, new_rate):
+        currency, rate = self.rates_model[path]
+        new_rate = locale.atof(new_rate)
+        if rate != new_rate:
+            add_rate(currency, new_rate)
+            self.rates_model[path][1] = new_rate
         
     def on_right_button_press(self, widget, event):
         #  Check of right mouse button was pressed
