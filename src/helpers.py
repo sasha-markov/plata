@@ -20,7 +20,7 @@ def load_currencies(csvfile):
     with open(csvfile) as f:
         return set([row['currency code'] for row in csv.DictReader(f)])
 
-def exchange(from_currency, to_currency, api_key):
+def exchange(from_currency, to_currency, api_key = API_KEY):
     phys = load_currencies('../physical_currency_list.csv')
     digit = load_currencies('../digital_currency_list.csv')
 

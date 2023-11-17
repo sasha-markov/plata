@@ -4,9 +4,9 @@ from gi.repository import Gtk, Gdk
 
 import locale
 
-from sqlalchemy import select
+from sqlalchemy import exc, select
 
-from database import Session
+from database import init_db, Session
 from models import Account, LastRate, LastBalance, subq_accounts
 
 # Fix this

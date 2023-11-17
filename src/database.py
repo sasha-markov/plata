@@ -1,12 +1,25 @@
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
-DB_FILE = '../data_test8.db'
+DB_FILE = '../data_test9.db'
 
 engine = create_engine(f'sqlite:///{DB_FILE}', future=True, echo=True)
 Base = declarative_base()
 Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+# Code from sqlalchemy-utils
+def sqlite_file_exists(database = DB_FILE):
+    if not os.path.isfile(database) or os.path.getsize(database) < 100:
+        return False
+
+    with open(database, 'rb') as f:
+        header = f.read(100)
+
+    return header[:16] == b'SQLite format 3\100'
 
 
 def init_db():

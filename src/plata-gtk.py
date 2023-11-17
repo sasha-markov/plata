@@ -5,6 +5,7 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gio, GLib, Gtk
 
 from mainwin import MainWin
+from database import init_db, sqlite_file_exists
 
 TITLE = 'Plata'
 MAIN_WINDOW_HEIGHT = 700
@@ -18,6 +19,9 @@ class MyApplication(Gtk.Application):
 
     def do_startup(self):
         Gtk.Application.do_startup(self)
+
+        if not sqlite_file_exists():
+            init_db()
 
         action = Gio.SimpleAction.new('about', None)
         action.connect('activate', self.on_about)

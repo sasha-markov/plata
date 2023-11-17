@@ -5,9 +5,10 @@ from gi.repository import Gtk, Gdk
 from sqlalchemy import func, select, update
 
 from database import Session
-from helpers import get_localtime
+from helpers import exchange, get_localtime, load_currencies
 from models import Account, Balance, LastBalance, LastRate,\
                    select_balances, subq_accounts
+from ratewin import add_rate
 from views import CreateView, DropView
 
 #Fix this
@@ -185,9 +186,13 @@ class NewAccountWin(Gtk.Window):
     def __init__(self, parent, title, **kwargs):
         super().__init__(transient_for=parent, **kwargs)
 
+        self.phys_currencies = load_currencies('../physical_currency_list.csv')
+        self.digit_currencies = load_currencies('../digital_currency_list.csv')        
+
         self.parent = parent
         self.accounts_model = parent.accounts_model
         self.accounts_names = set([row[0] for row in self.accounts_model])
+        self.rates = dict([row for row in parent.rates_model])
 
         self.set_default_size(WINDOW_WIDTH, -1)
 
@@ -212,11 +217,33 @@ class NewAccountWin(Gtk.Window):
                                      status_bar=self.status_bar,
                                      test_set=self.accounts_names)
         self.currency_entry = Gtk.Entry()
+        self.rate_entry = Gtk.Entry()
         self.categories_entry = Gtk.Entry()
         self.balance_entry = Gtk.Entry()
 
+        self.rate_label = MyLabel(label='Rate')
+
+        self.rate_entry.connect('changed', self.on_rate_changed)
+        self.rate_entry.connect('icon-press', self.on_rate_press)
+        
+        self.currencies_model = Gtk.ListStore(str)
+        for currency in self.phys_currencies | self.digit_currencies:
+            self.currencies_model.append([currency])
+        
+        self.currency_completion = Gtk.EntryCompletion()
+        self.currency_completion.set_minimum_key_length(1)
+        self.currency_completion.set_model(self.currencies_model)
+        self.currency_completion.set_text_column(0)
+        self.currency_completion.connect('match-selected', self.on_currency_selected)
+        
+        self.currency_entry.set_completion(self.currency_completion)
+        
+        self.rate_entry.set_icon_from_icon_name(Gtk.EntryIconPosition.SECONDARY,
+                                                'view-refresh')
+
         self.entries = (MyLabel(label='Account name'), self.account_entry,
                         MyLabel(label='Currency'), self.currency_entry,
+                        self.rate_label, self.rate_entry,
                         MyLabel(label='Categories'), self.categories_entry,
                         MyLabel(label='Balance'), self.balance_entry,
                         self.status_bar)
@@ -228,7 +255,20 @@ class NewAccountWin(Gtk.Window):
     def on_cancel(self, widget):
         self.close()
 
+    def on_currency_selected(self, entry_completion, model, treeiter):
+        currency = model[treeiter][0]
+        if currency in self.rates.keys():
+            rate = self.rates[currency]
+            self.rate_entry.set_text(str(rate))
+            fs = f'Rate (1 {currency} = ${rate:,.3f} or $1 = {1/rate:,.4f} {currency})'
+            self.rate_label.set_label(fs)
+        else:
+            self.rate_label.set_label(f'Rate (1 {currency} = $?)')
+
     def on_create(self, widget):
+        new_rates_model = add_rate(self.currency_entry.get_text(),
+                                   self.rate_entry.get_text())
+        self.parent.rates_treeview.set_model(new_rates_model)        
         new_model = create_account(self.account_entry.get_text(),
                                    self.currency_entry.get_text(),
                                    self.categories_entry.get_text(),
@@ -239,3 +279,23 @@ class NewAccountWin(Gtk.Window):
         self.parent.update_filters()
         self.parent.update_total()
         self.close()
+
+    def on_rate_changed(self, widget):
+        currency = self.currency_entry.get_text()
+        rate = float(self.rate_entry.get_text())
+        if rate:
+            fs = f'Rate (1 {currency} = ${rate:,.3f} or $1 = {1/rate:,.4f} {currency})'
+            self.rate_label.set_label(fs)
+        else:
+            self.rate_label.set_label('')
+    
+        self.status_bar.pop(303)
+
+    def on_rate_press(self, entry, icon_pos, event):
+        if self.currency_entry.get_text():
+            currency = self.currency_entry.get_text()
+            rate = exchange(currency, 'USD')
+            if rate:
+                entry.set_text(str(rate))
+            else:
+                self.status_bar.push(303, f'Unknown currency code {currency}')
