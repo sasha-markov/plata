@@ -192,7 +192,7 @@ class NewAccountWin(Gtk.Window):
         self.parent = parent
         self.accounts_model = parent.accounts_model
         self.accounts_names = set([row[0] for row in self.accounts_model])
-        self.rates = dict([row for row in parent.rates_model])
+        self.rates = dict([row[:2] for row in parent.rates_model])
 
         self.set_default_size(WINDOW_WIDTH, -1)
 

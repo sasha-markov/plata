@@ -10,22 +10,28 @@ from database import Base
 
 
 class Account(Base):
-    """ Describe an account """
-
+    """ Describe account """
+    
     __tablename__ = 'accounts'
+    
     id = Column(Integer, primary_key=True)
     name = Column(String)
+    """ Identifier assigned by user consisting of letters and numbers """
     currency = Column(String)
+    """ Currency code https://en.wikipedia.org/wiki/ISO_4217 """
     categories = Column(String)
-
+    """ Categories assigned by user to an account separated by comma """
 
 class Balance(Base):
-    """ Describe a balance """
+    """ Describe balance on the account """
 
     __tablename__ = 'balances'
+    
     id = Column(Integer, primary_key=True)
     account = Column(String)
+    """ Account.name """
     updated = Column(String)
+    """ """
     data = Column(Float)
 
 

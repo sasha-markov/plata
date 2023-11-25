@@ -34,7 +34,8 @@ class MyApplication(Gtk.Application):
     def do_activate(self):
         self.main_window = MainWin(application=self, title=TITLE,
                                    default_height=MAIN_WINDOW_HEIGHT,
-                                   default_width=MAIN_WINDOW_HEIGHT*R)
+                                   default_width=MAIN_WINDOW_HEIGHT*R,
+                                   border_width=0)
         self.main_window.about_button.connect('clicked', self.on_about)
         self.main_window.present()
 
