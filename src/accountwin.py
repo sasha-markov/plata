@@ -12,7 +12,7 @@ from ratewin import add_rate
 from views import CreateView, DropView
 
 #Fix this
-from utils import create_table_views, get_account_mod
+# from utils import create_table_views, get_account_mod
 
 R = 1.618            # Golden ratio
 

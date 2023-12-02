@@ -36,6 +36,8 @@ class MyApplication(Gtk.Application):
                                    default_height=MAIN_WINDOW_HEIGHT,
                                    default_width=MAIN_WINDOW_HEIGHT*R,
                                    border_width=0)
+        self.css_provider = Gtk.CssProvider()
+        self.css_provider.load_from_path('plata.css')
         self.main_window.about_button.connect('clicked', self.on_about)
         self.main_window.present()
 

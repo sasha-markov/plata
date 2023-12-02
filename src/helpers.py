@@ -10,6 +10,7 @@ import time
 import requests
 
 API_KEY = '5XR4CQOINA0WR14S'
+COIN_MARKET_CAP_API_KEY = 'befd683e-e690-4f62-8cdd-16d7797afd79'
 RESPONSE_FILE = '../response.json'
 
 
@@ -20,7 +21,32 @@ def load_currencies(csvfile):
     with open(csvfile) as f:
         return set([row['currency code'] for row in csv.DictReader(f)])
 
-def exchange(from_currency, to_currency, api_key = API_KEY):
+def exchange_crypto(#from_currency: str,
+                    #to_currency: str,
+                    api_key = COIN_MARKET_CAP_API_KEY) -> float or None:
+    url_sandbox = 'https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/listings/latest'
+    url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest'
+    parameters = {
+        'start':'1',
+        'limit':'15',
+        'convert':'USD'
+    }
+    headers = {
+        'Accepts': 'application/json',
+        'X-CMC_PRO_API_KEY': 'befd683e-e690-4f62-8cdd-16d7797afd79',
+    }
+    session = requests.Session()
+    session.headers.update(headers)
+    try:
+        response = session.get(url, params=parameters)
+        data = json.loads(response.text)
+        return data
+    except (requests.ConnectionError,
+            requests.Timeout,
+            requests.TooManyRedirects) as e:
+        print(e)
+
+def exchange(from_currency, to_currency, api_key = API_KEY) -> float or None:
     phys = load_currencies('../physical_currency_list.csv')
     digit = load_currencies('../digital_currency_list.csv')
 
@@ -37,6 +63,9 @@ def exchange(from_currency, to_currency, api_key = API_KEY):
             if d.get('Error Message'):
                 print(d.get('Error Message'))
                 return None
+            if d.get('Information'):
+                print(d.get('Information'))
+                return None
             else:         
                 rate = d['Realtime Currency Exchange Rate']['5. Exchange Rate']
                 return float(rate)
@@ -44,7 +73,7 @@ def exchange(from_currency, to_currency, api_key = API_KEY):
         print(f'I do not know {from_currency} or {to_currency}!')
         return None
     
-def get_rates(currencies):
+def get_rates_from_market(currencies: set, queue) -> dict:
     rates = []
     i = 1
     for currency in currencies:
@@ -61,5 +90,6 @@ def get_rates(currencies):
         if rate == 0:         # some stablecoins zeroed
             rate = 1.0
         rates.append([currency, rate])
+        queue.put(f'{currency} updated')
         i += 1
     return dict(rates)

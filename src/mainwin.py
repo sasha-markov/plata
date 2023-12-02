@@ -1,16 +1,21 @@
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk
+from gi.repository import Gtk, Gdk, GLib
 
 from datetime import datetime, timedelta
 import locale
+import queue
+import threading
+from time import sleep
 
 from sqlalchemy import select
 
 from database import Session
-from helpers import exchange, get_localtime
-from models import Account, LastRate, LastBalance, subq_accounts
+from helpers import exchange, get_localtime, get_rates_from_market, API_KEY
+from models import Account, LastRate, LastBalance, Rate,\
+                   subq_accounts, select_rates
 
+from views import CreateView, DropView
 from accountwin import NewAccountWin, EditAccountWin
 from ratewin import NewRateWin, add_rate
 
@@ -86,6 +91,63 @@ def get_account(name: str) -> tuple:
         return session.query(subq_update_account).first()
 
 
+def add_rates(rates: dict) -> Gtk.ListStore:
+    with Session.begin() as session:
+        for currency, data in rates.items():
+            rate = Rate(updated=get_localtime(),
+                        currency1=currency,
+                        currency2='USD',
+                        data=data)
+            session.add(rate)
+
+    with Session.begin() as session:
+        session.execute(DropView('vrates'))
+        session.execute(CreateView('vrates', select_rates))
+        rows = session.query(
+            select(LastRate.currency1,
+                   LastRate.data,
+                   LastRate.updated).subquery()
+        ).all()
+    rates_model = Gtk.ListStore(str, float, str)
+    [rates_model.append(row) for row in rows]
+    return rates_model
+
+
+
+class MyThread(threading.Thread):
+    def __init__(self, queue, currencies):
+        threading.Thread.__init__(self)
+        self._queue = queue
+        self._currencies = currencies
+        # self._max = n_tasks
+
+    def run(self):
+        rates = []
+        i = 1
+        for currency in self._currencies:
+            if i == 6:
+                sleep(65)
+                i = 1
+            if currency == 'USD':
+                rate = 1.0
+            else:
+                try:
+                    rate = exchange(currency, 'USD', API_KEY)
+                except:
+                    rate = None
+            if rate == 0:
+                rate = 1.0
+            rates.append([currency, rate])
+            self._queue.put([currency, rate])
+            i += 1
+        # for i in range(self._max):
+        #     # simulate a task 
+        #     sleep(1)
+        #     # put something in the data queue
+        #     self._queue.put(1)
+
+
+
 class FilterElement(Gtk.ListBoxRow):
     """Describes filters by category"""
     def __init__(self, data):
@@ -113,23 +175,23 @@ class MyCellRenderer(Gtk.CellRendererText):
 
 class MyTreeView(Gtk.TreeView):
     def __init__(self,
-                 titles: list,
+                 column_titles: list,
                  func,
-                 cols_editable=[],
-                 cols_functions=[],
+                 cols_editable={},
                  **kwargs):
         super().__init__(**kwargs)
         self.set_grid_lines(GRID_LINES)
-        for i, title in enumerate(titles):
+        for i, title in enumerate(column_titles):
             renderer = Gtk.CellRendererText(height=CELL_HEIGHT)
             column = Gtk.TreeViewColumn(title, renderer, text=i)
-            if i in cols_editable:
+            #! Fix this: renderer class?
+            if i in cols_editable.keys():
                 renderer.props.editable = True
-                renderer.connect('edited', cols_functions[0]) #! Fix this
+                renderer.connect('edited', cols_editable[i])
             column.set_cell_data_func(renderer, func, func_data=i)
             column.set_expand(True)
             self.append_column(column)
-      
+
 
 
 class MainWin(Gtk.ApplicationWindow):
@@ -151,6 +213,15 @@ class MainWin(Gtk.ApplicationWindow):
         self.rates_model = Gtk.ListStore(str, float, str)
         get_rates(self.rates_model)
         self.rates_updated = False # True if db updated, but model is not
+
+        # max and current number of tasks
+        # self._max = 30
+        # self._curr = ''
+
+        # queue to share data between threads
+        self._queue = queue.Queue()
+        self.rates = []
+
 
         """
         HeaderBar {
@@ -254,7 +325,9 @@ class MainWin(Gtk.ApplicationWindow):
         # Setting up the header bar with menu button which opens popover
         self.hb = Gtk.HeaderBar(title=self.title, show_close_button=True)
         self.hb.pack_end(Gtk.MenuButton(popover=self.popover))
-        self.hb.pack_end(Gtk.Button(label='Update Rates'))
+        self.update_rates_button = Gtk.Button(label='Update Rates')
+        self.update_rates_button.connect('clicked', self.update_rates)
+        self.hb.pack_end(self.update_rates_button)
 
         self.set_titlebar(self.hb)
 
@@ -267,19 +340,17 @@ class MainWin(Gtk.ApplicationWindow):
 
         # Creating the treeview, making it use the filter as a model,
         # and adding the columns
-        # !Should define MyTreeView class
         titles = ['Account', 'Balance', 'In USD']
-        self.accounts_treeview = MyTreeView(titles=titles,
+        self.accounts_treeview = MyTreeView(column_titles=titles,
                                             func=self.accounts_cell_data_func,
                                             model=self.user_filter)
         self.accounts_treeview.connect('button-press-event',
                                        self.on_right_button_press)        
         
-        titles = ['Account', 'Balance', 'In USD']
-        self.rates_treeview = MyTreeView(titles=titles,
+        titles = ['Currency', 'Rate', 'Updated']
+        self.rates_treeview = MyTreeView(column_titles=titles,
                                          func=self.rates_cell_data_func,
-                                         cols_editable=[1],
-                                         cols_functions=[self.on_rate_edited],
+                                         cols_editable={1: self.on_rate_edited},
                                          model=self.rates_model)
         self.rates_treeview.connect('button-press-event',
                                     self.on_right_button_press)
@@ -304,6 +375,7 @@ class MainWin(Gtk.ApplicationWindow):
         self.accounts_window.add(self.accounts_treeview)
 
         self.status_bar = MyStatusbar()
+        self.status_bar.props.name = 'status_bar'
         self.frame = Gtk.Frame()
         self.frame.add(self.status_bar)
 
@@ -369,8 +441,15 @@ class MainWin(Gtk.ApplicationWindow):
         self.notebook.append_page(self.vvvbox,
                                   Gtk.Label(label='Exchange rates'))
 
-        self.add(self.notebook)
         self.notebook.connect('switch-page', self.on_switch_page)
+
+        self.overlay = Gtk.Overlay()
+        self.overlay.add(self.notebook)
+        self.ssbar = MyStatusbar(halign=1, valign=2)
+        self.ssbar.props.name = 'ssbar'
+        self.overlay.add_overlay(self.ssbar)
+        self.add(self.overlay)
+        
         self.filters_listbox.select_row(
             self.filters_listbox.get_row_at_index(0)
         )
@@ -478,6 +557,23 @@ class MainWin(Gtk.ApplicationWindow):
             self.rates_model[treeiter][2] = get_localtime()
         print(f'New Rate: {new_rate}')
 
+    def update_rates(self, widget):
+        # self.ssbar.pop(303)
+        exceptions = {'ARS', 'RUB', 'USD', 'USDC', 'USDT'}
+        currencies = {row[0] for row in self.rates_model}
+
+        # install timer event to check the queue for new data from the thread
+        GLib.timeout_add(interval=250, function=self._on_timer)
+        # start the thread
+        self._thread = MyThread(self._queue, currencies - exceptions)
+        self._thread.start()
+          
+        # print(currencies)
+        # self.ssbar.push(303, f'Updating rates...')
+        # new_rates = get_rates_from_market(currencies - exceptions, logger)
+        # print(new_rates)
+        # new_rates_model = add_rates(new_rates)
+
     def update_total(self):
         total = self.sum_accounts(self.user_filter)
         self.status_bar.pop(303)
@@ -534,6 +630,33 @@ class MainWin(Gtk.ApplicationWindow):
             self.set_model(new_model)
             self.update_total()
             self.rates_updated = False
+
+    def _on_timer(self):
+        # if the thread is dead and no more data available...
+        if not self._thread.is_alive() and self._queue.empty():
+            # ...end the timer
+            self.new_rates = dict(self.rates)
+            print(self.new_rates)
+            new_rates_model = add_rates(self.new_rates)
+            self.rates_treeview.set_model(new_rates_model)
+            new_accounts_model = _get_accounts()
+            self.set_model(new_accounts_model)
+            self.update_total()
+            return False
+
+        # if data available
+        while not self._queue.empty():
+            # read data from the thread
+            currency, rate = self._queue.get()
+            if rate is not None:
+                self.rates.append([currency, rate])
+                # update the statusbar
+                self.ssbar.push(303, f'{currency} updated')
+            else:
+                self.ssbar.push(303, f'There is error while updating {currency}')
+
+        # keep the timer alive
+        return True
 
     def on_update_button_clicked(self, widget):
         dialog = UpdateDialog(self)
