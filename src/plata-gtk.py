@@ -17,6 +17,7 @@ class MyApplication(Gtk.Application):
         super().__init__(application_id=f'net.amarkov.{TITLE}')
         GLib.set_application_name(TITLE)
 
+
     def do_startup(self):
         Gtk.Application.do_startup(self)
 
@@ -32,7 +33,9 @@ class MyApplication(Gtk.Application):
         self.add_action(action)
 
     def do_activate(self):
-        self.main_window = MainWin(application=self, title=TITLE,
+        self.main_window = MainWin(application=self,
+                                   title=TITLE,
+                                   subtitle='/tmp/untitled.db',
                                    default_height=MAIN_WINDOW_HEIGHT,
                                    default_width=MAIN_WINDOW_HEIGHT*R,
                                    border_width=0)

@@ -5,13 +5,15 @@ from gi.repository import Gtk, Gdk, GLib
 from datetime import datetime, timedelta
 import locale
 import queue
+from shutil import move
 import threading
 from time import sleep
 
 from sqlalchemy import select
 
 from database import Session
-from helpers import exchange, get_localtime, get_rates_from_market, API_KEY
+from helpers import exchange, get_localtime, get_rates_from_market, API_KEY,\
+                    settings, dump_settings
 from models import Account, LastRate, LastBalance, Rate,\
                    subq_accounts, select_rates
 
@@ -21,6 +23,8 @@ from ratewin import NewRateWin, add_rate
 
 BORDER_WIDTH = 4
 CELL_HEIGHT = 50
+DIALOG_WINDOW_HEIGHT = 500
+R = 1.618  # golden ratio
 GRID_LINES = 1
 PADDING = 4
 SPACING = 4
@@ -119,7 +123,6 @@ class MyThread(threading.Thread):
         threading.Thread.__init__(self)
         self._queue = queue
         self._currencies = currencies
-        # self._max = n_tasks
 
     def run(self):
         rates = []
@@ -140,11 +143,6 @@ class MyThread(threading.Thread):
             rates.append([currency, rate])
             self._queue.put([currency, rate])
             i += 1
-        # for i in range(self._max):
-        #     # simulate a task 
-        #     sleep(1)
-        #     # put something in the data queue
-        #     self._queue.put(1)
 
 
 
@@ -195,10 +193,11 @@ class MyTreeView(Gtk.TreeView):
 
 
 class MainWin(Gtk.ApplicationWindow):
-    def __init__(self, title, **kwargs):
+    def __init__(self, title, subtitle, **kwargs):
         super().__init__(**kwargs)
         locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
         self.title = title
+        self.subtitle = subtitle
 
         self.accounts_model = Gtk.ListStore(str, float, float, str)
         categories = []
@@ -278,6 +277,13 @@ class MainWin(Gtk.ApplicationWindow):
  
         self.vbox = Gtk.VBox()
         self.vbox.props.border_width = BORDER_WIDTH * 2
+        self.open_button = Gtk.ModelButton(label='Open...', halign=1)
+        self.vbox.pack_start(self.open_button, True, True, 0)
+        self.vbox.pack_start(Gtk.HSeparator(), False, False, 0)        
+        self.save_button = Gtk.ModelButton(label='Save As...', halign=1)
+        self.save_button.connect('clicked', self.on_save_button)
+        self.vbox.pack_start(self.save_button, True, True, 0)
+        self.vbox.pack_start(Gtk.HSeparator(), False, False, 0)
         # Adding menu items to box
         labels = ['Preferences', 'Keyboard Shortcuts', 'Help']
         for label in labels:
@@ -323,7 +329,9 @@ class MainWin(Gtk.ApplicationWindow):
             self.rates_menu.append(item)
 
         # Setting up the header bar with menu button which opens popover
-        self.hb = Gtk.HeaderBar(title=self.title, show_close_button=True)
+        self.hb = Gtk.HeaderBar(title=self.title,
+                                subtitle=self.subtitle,
+                                show_close_button=True)
         self.hb.pack_end(Gtk.MenuButton(popover=self.popover))
         self.update_rates_button = Gtk.Button(label='Update Rates')
         self.update_rates_button.connect('clicked', self.update_rates)
@@ -623,6 +631,32 @@ class MainWin(Gtk.ApplicationWindow):
         # Updates the filter, which updates in turn the view
         self.user_filter.refilter()
         self.update_total()
+
+    def on_save_button(self, widget):
+        dialog = Gtk.FileChooserDialog(
+            title='Save',
+            parent=self,
+            action=Gtk.FileChooserAction.SAVE,
+            # default_height=DIALOG_WINDOW_HEIGHT,
+            # default_width=DIALOG_WINDOW_HEIGHT*R
+        )
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL,
+            Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_SAVE,
+            0)
+        dialog.set_current_name('untitled.db')
+        response = dialog.run()
+        if response == 0:
+            self.db_file = dialog.get_filename()
+            # !fix: try..except
+            move('/tmp/untitled.db', self.db_file)
+            settings['recent_db_files'].append(self.db_file)
+            dump_settings()
+            # print(self.settings)
+            self.hb.props.subtitle = self.db_file
+            # print(f'file selected: {self.db_file}')
+        dialog.destroy()
 
     def on_switch_page(self, notebook, page, page_num):
         if page_num == 0 and self.rates_updated:

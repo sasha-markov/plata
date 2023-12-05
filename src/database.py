@@ -4,9 +4,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
-DB_FILE = '../data_test9.db'
+DB_FILE = '../data_test10.db'
 
-engine = create_engine(f'sqlite:///{DB_FILE}', future=True, echo=True)
+DEFAULT_DB_FILENAME = 'untitled.db'
+TMPDIR = '/tmp/'
+
+engine = create_engine(f'sqlite:///{TMPDIR + DEFAULT_DB_FILENAME}',
+                       future=True,
+                       echo=True)
 Base = declarative_base()
 Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

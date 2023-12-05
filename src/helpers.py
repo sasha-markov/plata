@@ -12,7 +12,22 @@ import requests
 API_KEY = '5XR4CQOINA0WR14S'
 COIN_MARKET_CAP_API_KEY = 'befd683e-e690-4f62-8cdd-16d7797afd79'
 RESPONSE_FILE = '../response.json'
+SETTINGS_FILENAME = '/home/markov/.plata-gtk/settings.json'
 
+def load_settings():
+    with open(SETTINGS_FILENAME, 'r') as f:
+        return json.load(f)
+
+settings = load_settings()
+
+# settings = {
+#     'recent_db_files': [],
+# }
+
+
+def dump_settings():
+    with open(SETTINGS_FILENAME, 'w') as f:
+        json.dump(settings, f)
 
 def get_localtime():
     return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
