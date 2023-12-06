@@ -9,10 +9,10 @@ from shutil import move
 import threading
 from time import sleep
 
-from sqlalchemy import select
+from sqlalchemy import create_engine, select
 
-from database import Session
-from helpers import exchange, get_localtime, get_rates_from_market, API_KEY,\
+from database import Session, init_db
+from helpers import exchange, get_localtime, get_rates_from_market,\
                     settings, dump_settings
 from models import Account, LastRate, LastBalance, Rate,\
                    subq_accounts, select_rates
@@ -29,6 +29,7 @@ GRID_LINES = 1
 PADDING = 4
 SPACING = 4
 
+api_key = settings['alphavantage_api_key']
 
 # Accounts class? -model, -categories, +get_accounts
 def get_accounts(accounts: Gtk.ListStore, categories: list):
@@ -135,7 +136,7 @@ class MyThread(threading.Thread):
                 rate = 1.0
             else:
                 try:
-                    rate = exchange(currency, 'USD', API_KEY)
+                    rate = exchange(currency, 'USD', api_key)
                 except:
                     rate = None
             if rate == 0:
@@ -171,6 +172,42 @@ class MyCellRenderer(Gtk.CellRendererText):
         self.props.editable = True
 
 
+
+class MyPopover(Gtk.Popover):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        self.vbox = Gtk.VBox()
+        self.vbox.props.border_width = BORDER_WIDTH * 2
+
+        menu_items = ['New Database...',
+                      '---',
+                      'Open Database...',
+                      '---',
+                      'Save Database As...',
+                      '---',
+                      'Preferences',
+                      'Keyboard Shortcuts',
+                      'Help',
+                      'About']
+        for item in menu_items:
+            if item == '---':
+                self.vbox.pack_start(Gtk.HSeparator(), False, False, 0)
+            else:
+                self.vbox.pack_start(
+                    Gtk.ModelButton(label=item, halign=1), True, True, 0
+                )
+        self.vbox.show_all()
+
+        self.add(self.vbox)
+
+
+    def connect_callback(self, index: int, func):
+        button = self.vbox.get_children()[index]
+        button.connect('clicked', func)
+
+
+
 class MyTreeView(Gtk.TreeView):
     def __init__(self,
                  column_titles: list,
@@ -193,11 +230,10 @@ class MyTreeView(Gtk.TreeView):
 
 
 class MainWin(Gtk.ApplicationWindow):
-    def __init__(self, title, subtitle, **kwargs):
+    def __init__(self, title, **kwargs):
         super().__init__(**kwargs)
         locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
         self.title = title
-        self.subtitle = subtitle
 
         self.accounts_model = Gtk.ListStore(str, float, float, str)
         categories = []
@@ -213,10 +249,6 @@ class MainWin(Gtk.ApplicationWindow):
         get_rates(self.rates_model)
         self.rates_updated = False # True if db updated, but model is not
 
-        # max and current number of tasks
-        # self._max = 30
-        # self._curr = ''
-
         # queue to share data between threads
         self._queue = queue.Queue()
         self.rates = []
@@ -228,14 +260,7 @@ class MainWin(Gtk.ApplicationWindow):
             menu_button {
             }
         }
-        
-        popover {
-            preferences_button,
-            kb_shortcuts_button,
-            help_button,
-            about_button
-        }
-        
+        popover {}
         notebook {
             accounts {
                 grid {
@@ -275,27 +300,10 @@ class MainWin(Gtk.ApplicationWindow):
         }
         """
  
-        self.vbox = Gtk.VBox()
-        self.vbox.props.border_width = BORDER_WIDTH * 2
-        self.open_button = Gtk.ModelButton(label='Open...', halign=1)
-        self.vbox.pack_start(self.open_button, True, True, 0)
-        self.vbox.pack_start(Gtk.HSeparator(), False, False, 0)        
-        self.save_button = Gtk.ModelButton(label='Save As...', halign=1)
-        self.save_button.connect('clicked', self.on_save_button)
-        self.vbox.pack_start(self.save_button, True, True, 0)
-        self.vbox.pack_start(Gtk.HSeparator(), False, False, 0)
-        # Adding menu items to box
-        labels = ['Preferences', 'Keyboard Shortcuts', 'Help']
-        for label in labels:
-            self.vbox.pack_start(Gtk.ModelButton(label=label, halign=1),
-                                 True, True, 0)
-
-        self.about_button = Gtk.ModelButton(label='About', halign=1)
-        self.vbox.pack_start(self.about_button, True, True, 0)
-        self.vbox.show_all()
-
-        self.popover = Gtk.Popover()
-        self.popover.add(self.vbox)
+        self.popover = MyPopover()
+        self.popover.connect_callback(0, self.on_new_button)
+        self.popover.connect_callback(2, self.on_open_button)
+        self.popover.connect_callback(4, self.on_save_button)
 
         # Creating the context popovers
         self.accounts_menu, self.rates_menu = Gtk.Menu(), Gtk.Menu()
@@ -330,7 +338,7 @@ class MainWin(Gtk.ApplicationWindow):
 
         # Setting up the header bar with menu button which opens popover
         self.hb = Gtk.HeaderBar(title=self.title,
-                                subtitle=self.subtitle,
+                                subtitle=Session.kw['bind'].url.database,
                                 show_close_button=True)
         self.hb.pack_end(Gtk.MenuButton(popover=self.popover))
         self.update_rates_button = Gtk.Button(label='Update Rates')
@@ -596,6 +604,32 @@ class MainWin(Gtk.ApplicationWindow):
             return True
         else:
             return self.current_filter in model[treeiter][3]
+
+    def on_new_button(self, widget):
+        dialog = Gtk.FileChooserDialog(
+            title='New',
+            parent=self,
+            action=Gtk.FileChooserAction.SAVE,
+            # default_height=DIALOG_WINDOW_HEIGHT,
+            # default_width=DIALOG_WINDOW_HEIGHT*R
+        )
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL,
+            Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_SAVE,
+            0)
+        response = dialog.run()
+        if response == 0:
+            self.db_file = dialog.get_filename()
+            print(self.db_file)
+            engine = create_engine(f'sqlite:///{self.db_file}',
+                                   future=True, echo=True)
+            Session.configure(bind=engine)
+            init_db(engine)
+        dialog.destroy()
+
+    def on_open_button(self, widget):
+        pass
 
     def on_rate_edited(self, widget, path, new_rate):
         currency, rate, updated = self.rates_model[path]

@@ -9,8 +9,6 @@ import time
 
 import requests
 
-API_KEY = '5XR4CQOINA0WR14S'
-COIN_MARKET_CAP_API_KEY = 'befd683e-e690-4f62-8cdd-16d7797afd79'
 RESPONSE_FILE = '../response.json'
 SETTINGS_FILENAME = '/home/markov/.plata-gtk/settings.json'
 
@@ -38,7 +36,7 @@ def load_currencies(csvfile):
 
 def exchange_crypto(#from_currency: str,
                     #to_currency: str,
-                    api_key = COIN_MARKET_CAP_API_KEY) -> float or None:
+                    api_key = settings['coin_market_cap_api_key']) -> float or None:
     url_sandbox = 'https://sandbox-api.coinmarketcap.com/v1/cryptocurrency/listings/latest'
     url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest'
     parameters = {
@@ -61,7 +59,9 @@ def exchange_crypto(#from_currency: str,
             requests.TooManyRedirects) as e:
         print(e)
 
-def exchange(from_currency, to_currency, api_key = API_KEY) -> float or None:
+def exchange(from_currency: str,
+             to_currency: str,
+             api_key = settings['alphavantage_api_key']) -> float or None:
     phys = load_currencies('../physical_currency_list.csv')
     digit = load_currencies('../digital_currency_list.csv')
 
