@@ -9,6 +9,8 @@ object-oriented design. The main features are:
 - Convert and sum balances using up-to-date exchange rates and prices
 - Store exchange rates, prices, and balances to analyze changes over time
 
+![image](screenshots/main_window_accounts.png)
+
 ## Intro
 
 

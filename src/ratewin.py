@@ -15,7 +15,7 @@ WINDOW_WIDTH=350
 R = 1.618  # golden ratio
 
 
-def add_rate(currency: str, data: float):
+def add_rate(currency: str, data: float) -> Gtk.ListStore:
     with Session.begin() as session:
         rate = Rate(updated=get_localtime(),
                     currency1=currency,
@@ -27,12 +27,13 @@ def add_rate(currency: str, data: float):
         session.execute(DropView('vrates'))
         session.execute(CreateView('vrates', select_rates))
         rows = session.query(
-            select(LastRate.currency1, LastRate.data).subquery()
+            select(LastRate.currency1,
+                   LastRate.data,
+                   LastRate.updated).subquery()
         ).all()
-    rates = Gtk.ListStore(str, float)
-    [rates.append(row) for row in rows]
-
-    return rates
+    rates_model = Gtk.ListStore(str, float, str)
+    [rates_model.append(row) for row in rows]
+    return rates_model
 
 
 class NewRateWin(Gtk.Window):

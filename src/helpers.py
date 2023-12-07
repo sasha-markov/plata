@@ -18,6 +18,8 @@ def load_settings():
 
 settings = load_settings()
 
+api_key = settings['alphavantage_api_key']
+
 # settings = {
 #     'recent_db_files': [],
 # }
@@ -70,7 +72,7 @@ def exchange(from_currency: str,
         url = (f'https://www.alphavantage.co/query?function={function}'
                + f'&from_currency={from_currency}'
                + f'&to_currency={to_currency}'
-               + f'&apikey={API_KEY}')
+               + f'&apikey={api_key}')
         with requests.get(url) as request, open(RESPONSE_FILE, 'a+') as f:
             d = request.json()
             json.dump(d, f)
@@ -99,7 +101,7 @@ def get_rates_from_market(currencies: set, queue) -> dict:
             rate = 1.0
         else:
             try:
-                rate = exchange(currency, 'USD', API_KEY)
+                rate = exchange(currency, 'USD', api_key)
             except:
                 rate = None
         if rate == 0:         # some stablecoins zeroed

@@ -16,7 +16,6 @@ from helpers import exchange, get_localtime, get_rates_from_market,\
                     settings, dump_settings
 from models import Account, LastRate, LastBalance, Rate,\
                    subq_accounts, select_rates
-
 from views import CreateView, DropView
 from accountwin import NewAccountWin, EditAccountWin
 from ratewin import NewRateWin, add_rate
@@ -30,6 +29,7 @@ PADDING = 4
 SPACING = 4
 
 api_key = settings['alphavantage_api_key']
+
 
 # Accounts class? -model, -categories, +get_accounts
 def get_accounts(accounts: Gtk.ListStore, categories: list):
@@ -47,11 +47,11 @@ def get_accounts(accounts: Gtk.ListStore, categories: list):
             if category.strip():
                 categories.append(category.strip())
 
-                
+
 def _get_accounts() -> Gtk.ListStore:
     """
     Retrieves rows from the db and appends them to
-    Gtk.ListStore(str, float, float, str)    
+    Gtk.ListStore(str, float, float, str)
     """
     accounts = Gtk.ListStore(str, float, float, str)
     with Session.begin() as session:
@@ -118,9 +118,8 @@ def add_rates(rates: dict) -> Gtk.ListStore:
     return rates_model
 
 
-
 class MyThread(threading.Thread):
-    def __init__(self, queue, currencies):
+    def __init__(self, queue: queue.Queue, currencies: set):
         threading.Thread.__init__(self)
         self._queue = queue
         self._currencies = currencies
@@ -137,7 +136,7 @@ class MyThread(threading.Thread):
             else:
                 try:
                     rate = exchange(currency, 'USD', api_key)
-                except:
+                except:  # Fix bare except
                     rate = None
             if rate == 0:
                 rate = 1.0
@@ -146,10 +145,9 @@ class MyThread(threading.Thread):
             i += 1
 
 
-
 class FilterElement(Gtk.ListBoxRow):
     """Describes filters by category"""
-    def __init__(self, data):
+    def __init__(self, data: str):
         # Fix magic numbers
         super().__init__(halign=1, margin_top=SPACING, margin_bottom=SPACING)
         self.data = data
@@ -160,6 +158,7 @@ class MyStatusbar(Gtk.Statusbar):
     """Describes status bar of the main window"""
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.props.name = 'status_bar'
         message_box = self.get_message_area()
         label = message_box.get_children()[0]
         message_box.set_child_packing(label, False, False, 0, Gtk.PackType.END)
@@ -171,6 +170,19 @@ class MyCellRenderer(Gtk.CellRendererText):
         self.height = CELL_HEIGHT
         self.props.editable = True
 
+
+class MyMenu(Gtk.Menu):
+    def __init__(self, labels: list, **kwargs):
+        super().__init__(**kwargs)
+
+        for label in labels:
+            item = Gtk.MenuItem(label=label)
+            item.show()
+            self.append(item)
+
+    def connect_callback(self, index: int, func):
+        menu_item = self.get_children()[index]
+        menu_item.connect('activate', func)
 
 
 class MyPopover(Gtk.Popover):
@@ -201,11 +213,9 @@ class MyPopover(Gtk.Popover):
 
         self.add(self.vbox)
 
-
     def connect_callback(self, index: int, func):
         button = self.vbox.get_children()[index]
         button.connect('clicked', func)
-
 
 
 class MyTreeView(Gtk.TreeView):
@@ -219,14 +229,13 @@ class MyTreeView(Gtk.TreeView):
         for i, title in enumerate(column_titles):
             renderer = Gtk.CellRendererText(height=CELL_HEIGHT)
             column = Gtk.TreeViewColumn(title, renderer, text=i)
-            #! Fix this: renderer class?
+            # Fix this: renderer class?
             if i in cols_editable.keys():
                 renderer.props.editable = True
                 renderer.connect('edited', cols_editable[i])
             column.set_cell_data_func(renderer, func, func_data=i)
             column.set_expand(True)
             self.append_column(column)
-
 
 
 class MainWin(Gtk.ApplicationWindow):
@@ -247,12 +256,11 @@ class MainWin(Gtk.ApplicationWindow):
 
         self.rates_model = Gtk.ListStore(str, float, str)
         get_rates(self.rates_model)
-        self.rates_updated = False # True if db updated, but model is not
+        self.rates_updated = False  # True if db updated, but model is not
 
         # queue to share data between threads
         self._queue = queue.Queue()
         self.rates = []
-
 
         """
         HeaderBar {
@@ -299,50 +307,35 @@ class MainWin(Gtk.ApplicationWindow):
             }
         }
         """
- 
+
         self.popover = MyPopover()
         self.popover.connect_callback(0, self.on_new_button)
         self.popover.connect_callback(2, self.on_open_button)
         self.popover.connect_callback(4, self.on_save_button)
 
         # Creating the context popovers
-        self.accounts_menu, self.rates_menu = Gtk.Menu(), Gtk.Menu()
+        self.accounts_menu = MyMenu(labels=['Add Account...',
+                                            'Edit Account...',
+                                            'Delete Account...'])
+        self.rates_menu = MyMenu(labels=['Add Rate...',
+                                         'Delete Rate',
+                                         'Update Rate'])
 
-        self.add_account_menuitem = Gtk.MenuItem(label='Add Account...')
-        self.edit_account_menuitem = Gtk.MenuItem(label='Edit Account...')
-        self.delete_account_menuitem = Gtk.MenuItem(label='Delete Account')
+        self.accounts_menu.connect_callback(0, self.add_account)
+        self.accounts_menu.connect_callback(1, self.edit_account)
+        self.accounts_menu.connect_callback(2, self._delete_account)
 
-        self.add_account_menuitem.connect('activate', self.add_account)
-        self.edit_account_menuitem.connect('activate', self.edit_account)
-        self.delete_account_menuitem.connect('activate', self._delete_account)
-
-        for item in [self.add_account_menuitem,
-                     self.edit_account_menuitem,
-                     self.delete_account_menuitem]:
-            item.show()
-            self.accounts_menu.append(item)
-
-        self.add_rate_menuitem = Gtk.MenuItem(label='Add Rate...')
-        self.delete_rate_menuitem = Gtk.MenuItem(label='Delete Rate')
-        self.update_rate_menuitem = Gtk.MenuItem(label='Update Rate')
-
-        self.add_rate_menuitem.connect('activate', self._add_rate)
-        self.delete_rate_menuitem.connect('activate', self.delete_rate)
-        self.update_rate_menuitem.connect('activate', self.update_rate)
-
-        for item in [self.add_rate_menuitem,
-                     self.delete_rate_menuitem,
-                     self.update_rate_menuitem]:
-            item.show()
-            self.rates_menu.append(item)
+        self.rates_menu.connect_callback(0, self._add_rate)
+        self.rates_menu.connect_callback(1, self.delete_rate)
+        self.rates_menu.connect_callback(2, self.update_rate)
 
         # Setting up the header bar with menu button which opens popover
         self.hb = Gtk.HeaderBar(title=self.title,
                                 subtitle=Session.kw['bind'].url.database,
                                 show_close_button=True)
-        self.hb.pack_end(Gtk.MenuButton(popover=self.popover))
         self.update_rates_button = Gtk.Button(label='Update Rates')
         self.update_rates_button.connect('clicked', self.update_rates)
+        self.hb.pack_end(Gtk.MenuButton(popover=self.popover))
         self.hb.pack_end(self.update_rates_button)
 
         self.set_titlebar(self.hb)
@@ -361,8 +354,8 @@ class MainWin(Gtk.ApplicationWindow):
                                             func=self.accounts_cell_data_func,
                                             model=self.user_filter)
         self.accounts_treeview.connect('button-press-event',
-                                       self.on_right_button_press)        
-        
+                                       self.on_right_button_press)
+
         titles = ['Currency', 'Rate', 'Updated']
         self.rates_treeview = MyTreeView(column_titles=titles,
                                          func=self.rates_cell_data_func,
@@ -370,7 +363,6 @@ class MainWin(Gtk.ApplicationWindow):
                                          model=self.rates_model)
         self.rates_treeview.connect('button-press-event',
                                     self.on_right_button_press)
-        
 
         # Creating the ListBox to filter by category and setting up events
         self.filters_listbox = Gtk.ListBox(border_width=BORDER_WIDTH*2)
@@ -391,17 +383,16 @@ class MainWin(Gtk.ApplicationWindow):
         self.accounts_window.add(self.accounts_treeview)
 
         self.status_bar = MyStatusbar()
-        self.status_bar.props.name = 'status_bar'
         self.frame = Gtk.Frame()
         self.frame.add(self.status_bar)
 
         self.delete_account_button = Gtk.Button(label='Delete Account')
         self.delete_account_button.connect('clicked', self._delete_account)
-        self.delete_account_button.props.sensitive = False
+        self.delete_account_button.props.sensitive = True
 
         self.edit_account_button = Gtk.Button(label='Edit Account...')
         self.edit_account_button.connect('clicked', self.edit_account)
-        self.edit_account_button.props.sensitive = False
+        self.edit_account_button.props.sensitive = True
 
         self.add_account_button = Gtk.Button(label='Add Account...')
         self.add_account_button.connect('clicked', self.add_account)
@@ -438,7 +429,7 @@ class MainWin(Gtk.ApplicationWindow):
         for button in [self.delete_rate_button,
                        self.edit_rate_button,
                        self.update_rate_button]:
-            button.props.sensitive = False
+            button.props.sensitive = True
 
         self.buttons_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.buttons_box.pack_start(self.delete_rate_button, False, False, 0)
@@ -465,7 +456,7 @@ class MainWin(Gtk.ApplicationWindow):
         self.ssbar.props.name = 'ssbar'
         self.overlay.add_overlay(self.ssbar)
         self.add(self.overlay)
-        
+
         self.filters_listbox.select_row(
             self.filters_listbox.get_row_at_index(0)
         )
@@ -515,7 +506,7 @@ class MainWin(Gtk.ApplicationWindow):
         child_model = model_filter.get_model()
         if treeiter:
             child_iter = model_filter.convert_iter_to_child_iter(treeiter)
-            account_name = child_model.get_value(child_iter, 0)            
+            account_name = child_model.get_value(child_iter, 0)
         account_name, currency, balance, categories = get_account(account_name)
         dialog = EditAccountWin(title='Edit Account', modal=True, parent=self)
         dialog.account_entry.props.editable = False
@@ -574,7 +565,6 @@ class MainWin(Gtk.ApplicationWindow):
         print(f'New Rate: {new_rate}')
 
     def update_rates(self, widget):
-        # self.ssbar.pop(303)
         exceptions = {'ARS', 'RUB', 'USD', 'USDC', 'USDT'}
         currencies = {row[0] for row in self.rates_model}
 
@@ -583,12 +573,6 @@ class MainWin(Gtk.ApplicationWindow):
         # start the thread
         self._thread = MyThread(self._queue, currencies - exceptions)
         self._thread.start()
-          
-        # print(currencies)
-        # self.ssbar.push(303, f'Updating rates...')
-        # new_rates = get_rates_from_market(currencies - exceptions, logger)
-        # print(new_rates)
-        # new_rates_model = add_rates(new_rates)
 
     def update_total(self):
         total = self.sum_accounts(self.user_filter)
@@ -610,8 +594,6 @@ class MainWin(Gtk.ApplicationWindow):
             title='New',
             parent=self,
             action=Gtk.FileChooserAction.SAVE,
-            # default_height=DIALOG_WINDOW_HEIGHT,
-            # default_width=DIALOG_WINDOW_HEIGHT*R
         )
         dialog.add_buttons(
             Gtk.STOCK_CANCEL,
@@ -621,11 +603,20 @@ class MainWin(Gtk.ApplicationWindow):
         response = dialog.run()
         if response == 0:
             self.db_file = dialog.get_filename()
-            print(self.db_file)
             engine = create_engine(f'sqlite:///{self.db_file}',
                                    future=True, echo=True)
             Session.configure(bind=engine)
             init_db(engine)
+            new_accounts_model = Gtk.ListStore(str, float, float, str)
+            self.set_model(new_accounts_model)
+            self.update_total()
+
+            new_rates_model = Gtk.ListStore(str, float, str)
+            self.rates_treeview.set_model(new_rates_model)
+
+            for item in self.filters_listbox.get_children()[1:]:
+                self.filters_listbox.remove(item)
+            self.hb.props.subtitle = self.db_file
         dialog.destroy()
 
     def on_open_button(self, widget):
@@ -671,8 +662,6 @@ class MainWin(Gtk.ApplicationWindow):
             title='Save',
             parent=self,
             action=Gtk.FileChooserAction.SAVE,
-            # default_height=DIALOG_WINDOW_HEIGHT,
-            # default_width=DIALOG_WINDOW_HEIGHT*R
         )
         dialog.add_buttons(
             Gtk.STOCK_CANCEL,
@@ -687,9 +676,7 @@ class MainWin(Gtk.ApplicationWindow):
             move('/tmp/untitled.db', self.db_file)
             settings['recent_db_files'].append(self.db_file)
             dump_settings()
-            # print(self.settings)
             self.hb.props.subtitle = self.db_file
-            # print(f'file selected: {self.db_file}')
         dialog.destroy()
 
     def on_switch_page(self, notebook, page, page_num):
@@ -704,7 +691,6 @@ class MainWin(Gtk.ApplicationWindow):
         if not self._thread.is_alive() and self._queue.empty():
             # ...end the timer
             self.new_rates = dict(self.rates)
-            print(self.new_rates)
             new_rates_model = add_rates(self.new_rates)
             self.rates_treeview.set_model(new_rates_model)
             new_accounts_model = _get_accounts()

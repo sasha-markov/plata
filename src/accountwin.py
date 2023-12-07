@@ -5,7 +5,7 @@ from gi.repository import Gtk, Gdk
 from sqlalchemy import func, select, update
 
 from database import Session
-from helpers import exchange, get_localtime, load_currencies
+from helpers import exchange, get_localtime, load_currencies, settings
 from models import Account, Balance, LastBalance, LastRate,\
                    select_balances, subq_accounts
 from ratewin import add_rate
@@ -21,6 +21,8 @@ BORDER_WIDTH = 8
 PADDING = 3
 
 MESSAGE = 'An account with that name already exists.'
+
+api_key = settings['alphavantage_api_key']
 
 def create_account(name: str,
                    currency: str,
